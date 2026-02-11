@@ -55,20 +55,17 @@ fn main() {
                         use wasm_bindgen::JsCast;
                         use web_sys::{Blob, HtmlElement, Url};
 
-                        // 创建 Blob
                         let array = js_sys::Uint8Array::from(&mesh[..]);
                         let parts = js_sys::Array::new();
                         parts.push(&array.buffer());
                         let blob = Blob::new_with_u8_array_sequence(&parts).unwrap();
 
-                        // 生成下载链接
                         let url = Url::create_object_url_with_blob(&blob).unwrap();
                         let window = web_sys::window().unwrap();
                         let document = window.document().unwrap();
                         let a = document.create_element("a").unwrap();
                         a.set_attribute("href", &url).unwrap();
-                        a.set_attribute("download", "20_data.bin")
-                            .unwrap();
+                        a.set_attribute("download", "20_data.bin").unwrap();
                         let a_elem: HtmlElement = a.dyn_into().unwrap();
                         a_elem.click();
                         Url::revoke_object_url(&url).unwrap();

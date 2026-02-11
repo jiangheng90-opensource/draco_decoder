@@ -15,7 +15,7 @@ fn main() {
     let target = std::env::var("TARGET").unwrap();
 
     // Step 1: Build Draco with CMake
-    let draco_build = format!("third_party/draco/build");
+    let draco_build = "third_party/draco/build".to_string();
     let draco_install = if target.contains("windows-msvc") {
         format!("{}/Release", draco_build)
     } else {

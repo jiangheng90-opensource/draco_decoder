@@ -1,6 +1,15 @@
 use std::path::Path;
 use std::process::Command;
 
+fn run_cmake_command(args: &[&str], current_dir: &String, stage: &str) {
+    let status = Command::new("cmake")
+        .args(args)
+        .current_dir(current_dir)
+        .status()
+        .unwrap_or_else(|_| panic!("Failed to execute cmake for {stage}"));
+    assert!(status.success(), "Draco {stage} failed");
+}
+
 fn main() {
     if std::env::var("DOCS_RS").is_ok() {
         println!("cargo:warning=Skipping native build on docs.rs");
@@ -39,33 +48,17 @@ fn main() {
         .expect("Failed to run CMake");
     assert!(status.success(), "CMake configuration failed");
 
-    if target.contains("windows-msvc") {
-        for cmd_args in &[
+    let (build_args, install_args) = if target.contains("windows-msvc") {
+        (
             vec!["--build", ".", "--config", "Release"],
             vec!["--install", ".", "--config", "Release"],
-        ] {
-            let status = Command::new("cmake")
-                .args(cmd_args)
-                .current_dir(&draco_build)
-                .status()
-                .expect("Failed to execute cmake");
-            assert!(status.success(), "Draco build/install failed");
-        }
+        )
     } else {
-        let status = Command::new("cmake")
-            .args(["--build", "."])
-            .current_dir(&draco_build)
-            .status()
-            .expect("Failed to build Draco");
-        assert!(status.success(), "Draco build failed");
+        (vec!["--build", "."], vec!["--install", "."])
+    };
 
-        let status = Command::new("cmake")
-            .args(["--install", "."])
-            .current_dir(&draco_build)
-            .status()
-            .expect("Failed to install Draco");
-        assert!(status.success(), "Draco install failed");
-    }
+    run_cmake_command(&build_args, &draco_build, "build");
+    run_cmake_command(&install_args, &draco_build, "install");
 
     let mut build = cxx_build::bridge("src/ffi.rs");
     build

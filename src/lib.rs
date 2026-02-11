@@ -50,7 +50,7 @@ mod tests {
         let output = decode_point_cloud_native(&input);
 
         assert!(
-            output.len() % 12 == 0,
+            output.len().is_multiple_of(12),
             "Expected output to be a multiple of 12 bytes (3 floats per point)"
         );
 

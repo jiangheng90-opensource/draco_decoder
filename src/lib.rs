@@ -12,7 +12,12 @@ use wasm::decode_mesh_wasm_worker;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn decode_mesh(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
-    decode_mesh_native(data, config).await
+    decode_mesh_native(data, config)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn decode_mesh_sync(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
+    decode_mesh_native(data, config)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -103,8 +108,7 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn test_decode_mesh() {
-        let input = fs::read("assets/20/20_data.bin")
-            .expect("Failed to read model file");
+        let input = fs::read("assets/20/20_data.bin").expect("Failed to read model file");
 
         let out_buf = test_mesh(&input).await;
 

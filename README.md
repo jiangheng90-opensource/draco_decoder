@@ -41,6 +41,9 @@ let data: &[u8] = /* your Draco encoded data here */;
 // Asynchronously decode the mesh data
 let buf = decode_mesh(data, &config).await;
 
+// for native user, you can use sync function
+ let buf = decode_mesh_sync(data, &config)
+
 // wrapper end
 ```
 

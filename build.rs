@@ -17,7 +17,7 @@ fn main() {
     // Step 1: Build Draco with CMake
     let draco_build = "third_party/draco/build".to_string();
     let draco_install = if target.contains("windows-msvc") {
-        format!("{}/Release", draco_build)
+        format!("{draco_build}/Release")
     } else {
         format!("{draco_build}/install")
     };
@@ -39,19 +39,33 @@ fn main() {
         .expect("Failed to run CMake");
     assert!(status.success(), "CMake configuration failed");
 
-    let status = Command::new("cmake")
-        .args(["--build", "."])
-        .current_dir(&draco_build)
-        .status()
-        .expect("Failed to build Draco");
-    assert!(status.success(), "Draco build failed");
+    if target.contains("windows-msvc") {
+        for cmd_args in &[
+            vec!["--build", ".", "--config", "Release"],
+            vec!["--install", ".", "--config", "Release"],
+        ] {
+            let status = Command::new("cmake")
+                .args(cmd_args)
+                .current_dir(&draco_build)
+                .status()
+                .expect("Failed to execute cmake");
+            assert!(status.success(), "Draco build/install failed");
+        }
+    } else {
+        let status = Command::new("cmake")
+            .args(["--build", "."])
+            .current_dir(&draco_build)
+            .status()
+            .expect("Failed to build Draco");
+        assert!(status.success(), "Draco build failed");
 
-    let status = Command::new("cmake")
-        .args(["--install", "."])
-        .current_dir(&draco_build)
-        .status()
-        .expect("Failed to install Draco");
-    assert!(status.success(), "Draco install failed");
+        let status = Command::new("cmake")
+            .args(["--install", "."])
+            .current_dir(&draco_build)
+            .status()
+            .expect("Failed to install Draco");
+        assert!(status.success(), "Draco install failed");
+    }
 
     let mut build = cxx_build::bridge("src/ffi.rs");
     build
@@ -69,7 +83,7 @@ fn main() {
     build.compile("decoder_api");
 
     if target.contains("windows-msvc") {
-        println!("cargo:rustc-link-search=native={}", draco_install);
+        println!("cargo:rustc-link-search=native={draco_install}");
     } else {
         println!("cargo:rustc-link-search=native={draco_install}/lib");
     }

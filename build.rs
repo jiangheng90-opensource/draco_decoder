@@ -36,7 +36,7 @@ fn main() {
         ];
 
         let status = Command::new("cmake")
-            .args(&cmake_args)
+            .args(cmake_args)
             .current_dir(draco_build)
             .status()
             .expect("Failed to run CMake");

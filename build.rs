@@ -64,7 +64,6 @@ fn main() {
     build
         .file("cpp/decoder_api.cc")
         .include("include")
-        .include("target/cxxbridge/draco_decoder/src")
         .include("third_party/draco/src")
         .include("third_party/draco/build")
         .include(format!("{draco_install}/include"))

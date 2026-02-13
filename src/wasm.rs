@@ -32,7 +32,6 @@ async fn get_js_module() -> Result<JsValue, JsValue> {
     "#
     );
 
-    // Use eval to run the wrapper and return a promise of the module
     let js_module = js_sys::eval(&setup_code)?;
     let module_promise: Promise = js_module.dyn_into()?;
     let module = JsFuture::from(module_promise).await?;
@@ -40,36 +39,6 @@ async fn get_js_module() -> Result<JsValue, JsValue> {
     DRACO_DECODE_FUNC_MODULE.with(|m| m.replace(Some(module.clone())));
 
     Ok(module)
-}
-
-async fn decode_draco_mesh_from_embedded_js(
-    data: &js_sys::Uint8Array,
-    byte_length: usize,
-) -> Result<js_sys::Uint8Array, JsValue> {
-    let module = get_js_module().await?;
-
-    // Call the decode function from the module
-    let decode_fn = js_sys::Reflect::get(&module, &JsValue::from_str("decodeDracoMeshInWorker"))?
-        .dyn_into::<js_sys::Function>()?;
-
-    let this = JsValue::NULL;
-    let result = decode_fn.call2(&this, data, &JsValue::from(byte_length))?;
-    let decode_promise: Promise = result.dyn_into()?;
-    let out_buf = JsFuture::from(decode_promise).await?;
-    Ok(out_buf.dyn_into::<Uint8Array>()?)
-}
-
-pub async fn decode_mesh_wasm_worker(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
-    let js_array = Uint8Array::from(data);
-    let estimate_buffer_size = config.estimate_buffer_size();
-
-    match decode_draco_mesh_from_embedded_js(&js_array, estimate_buffer_size).await {
-        Ok(decoded) => Some(decoded.to_vec()),
-        Err(err) => {
-            web_sys::console::error_1(&err);
-            None
-        }
-    }
 }
 
 async fn decode_draco_mesh_from_embedded_js_with_config(

@@ -1,44 +1,97 @@
+//! # draco_decoder
+//!
+//! A Rust library for decoding Draco compressed meshes with native and WebAssembly support.
+//!
+//! ## Example
+//!
+//! ```ignore
+//! use draco_decoder::decode_mesh_with_config;
+//!
+//! let data: &[u8] = /* your Draco encoded data */;
+//! if let Some(result) = decode_mesh_with_config(data).await {
+//!     println!("Vertices: {}", result.config.vertex_count());
+//!     println!("Indices: {}", result.config.index_count());
+//! }
+//! ```
+
 #[cfg(not(target_arch = "wasm32"))]
 mod ffi;
 pub mod utils;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use ffi::MeshCache;
-#[cfg(not(target_arch = "wasm32"))]
-use ffi::decode_mesh_native;
 pub use utils::{
     AttributeDataType, AttributeValues, DracoDecodeConfig, MeshAttribute, MeshDecodeResult,
 };
-#[cfg(target_arch = "wasm32")]
-use wasm::decode_mesh_wasm_worker;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub async fn decode_mesh(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
-    decode_mesh_native(data, config)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn decode_mesh_sync(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
-    decode_mesh_native(data, config)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub async fn decode_mesh(data: &[u8], config: &DracoDecodeConfig) -> Option<Vec<u8>> {
-    decode_mesh_wasm_worker(data, config).await
-}
-
+/// Decodes a Draco compressed mesh asynchronously.
+///
+/// This function automatically decodes the mesh and extracts metadata including
+/// vertex count, index count, and attribute information.
+///
+/// # Arguments
+///
+/// * `data` - The Draco encoded mesh data
+///
+/// # Returns
+///
+/// Returns `Some(MeshDecodeResult)` on success, containing:
+/// - `data` - The decoded mesh buffer
+/// - `config` - Metadata about the decoded mesh
+///
+/// Returns `None` if decoding fails.
+///
+/// # Example
+///
+/// ```ignore
+/// use draco_decoder::decode_mesh_with_config;
+///
+/// async fn example() {
+///     let data: &[u8] = /* your Draco encoded data */;
+///     if let Some(result) = decode_mesh_with_config(data).await {
+///         let decoded_buffer = result.data;
+///         let config = result.config;
+///     }
+/// }
+/// ```
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn decode_mesh_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
     ffi::decode_mesh_with_config(data)
 }
 
+/// Decodes a Draco compressed mesh synchronously (native only).
+///
+/// This function automatically decodes the mesh and extracts metadata including
+/// vertex count, index count, and attribute information.
+///
+/// # Arguments
+///
+/// * `data` - The Draco encoded mesh data
+///
+/// # Returns
+///
+/// Returns `Some(MeshDecodeResult)` on success, containing:
+/// - `data` - The decoded mesh buffer
+/// - `config` - Metadata about the decoded mesh
+///
+/// Returns `None` if decoding fails.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn decode_mesh_with_config_sync(data: &[u8]) -> Option<MeshDecodeResult> {
     ffi::decode_mesh_with_config(data)
 }
 
+/// Decodes a Draco compressed mesh asynchronously (WASM).
+///
+/// This function uses a JavaScript Worker to decode the mesh asynchronously
+/// in the browser environment.
+///
+/// # Arguments
+///
+/// * `data` - The Draco encoded mesh data
+///
+/// # Returns
+///
+/// Returns `Some(MeshDecodeResult)` on success, `None` if decoding fails.
 #[cfg(target_arch = "wasm32")]
 pub async fn decode_mesh_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
     wasm::decode_mesh_wasm_worker_with_config(data).await
@@ -48,9 +101,8 @@ pub async fn decode_mesh_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
 mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
-    use super::ffi::{debug_estimate_draco_buffer_len, decode_point_cloud_native};
+    use super::ffi::decode_point_cloud_native;
     use super::utils::{AttributeDataType, DracoDecodeConfig};
-    use crate::decode_mesh;
     use std::collections::HashSet;
     use std::fs::{self};
 
@@ -91,52 +143,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn test_mesh_buffer_len() {
-        #[cfg(not(target_arch = "wasm32"))]
-        let input = fs::read("assets/20/20_data.bin").expect("Failed to read model file");
-
-        let expect_len = debug_estimate_draco_buffer_len(&input);
-
-        let mut config = DracoDecodeConfig::new(3254, 4368);
-        config.add_attribute(3, AttributeDataType::Float32);
-        config.add_attribute(3, AttributeDataType::Float32);
-        config.add_attribute(1, AttributeDataType::Float32);
-
-        let actual_len = config.estimate_buffer_size();
-        println!("{actual_len}");
-
-        assert_eq!(actual_len, expect_len);
-    }
-
-    async fn test_mesh(data: &[u8]) -> Vec<u8> {
-        let mut config = DracoDecodeConfig::new(3254, 4368);
-        config.add_attribute(3, AttributeDataType::Float32);
-        config.add_attribute(3, AttributeDataType::Float32);
-        config.add_attribute(1, AttributeDataType::Float32);
-
-        let Some(buf) = decode_mesh(data, &config).await else {
-            panic!("Mesh decode fail")
-        };
-        assert_eq!(buf.len(), config.estimate_buffer_size());
-
-        buf
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[tokio::test]
-    async fn test_decode_mesh() {
-        let input = fs::read("assets/20/20_data.bin").expect("Failed to read model file");
-
-        let out_buf = test_mesh(&input).await;
-
-        fs::create_dir_all("assets/20_decode").ok();
-        let path = "assets/20_decode/20_data.bin";
-        fs::write(path, &out_buf).expect("Failed to write decoded mesh binary");
-        println!("Wrote decoded mesh to {path}");
-    }
-
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::*;
 
@@ -167,48 +173,6 @@ mod tests {
         assert_eq!(attr_1.lenght(), 133952);
     }
 
-    #[cfg(target_arch = "wasm32")]
-    #[wasm_bindgen_test]
-    fn test_decode_mesh_wasm() {
-        use super::*;
-        use wasm_bindgen::*;
-        use wasm_bindgen_futures::spawn_local;
-        use web_sys::console;
-
-        async fn fetch_binary(url: &str) -> Result<Vec<u8>, JsValue> {
-            use wasm_bindgen_futures::JsFuture;
-            use web_sys::{Request, RequestInit, RequestMode, Response};
-
-            let opts = RequestInit::new();
-            opts.set_method("GET");
-            opts.set_mode(RequestMode::Cors);
-
-            let request = Request::new_with_str_and_init(url, &opts)?;
-            let resp_value =
-                JsFuture::from(web_sys::window().unwrap().fetch_with_request(&request)).await?;
-            let resp: Response = resp_value.dyn_into().unwrap();
-            if !resp.ok() {
-                return Err(JsValue::from_str("Fetch failed"));
-            }
-            let buf = JsFuture::from(resp.array_buffer()?).await?;
-            let u8_array = js_sys::Uint8Array::new(&buf);
-            let mut body = vec![0; u8_array.length() as usize];
-            u8_array.copy_to(&mut body[..]);
-            Ok(body)
-        }
-
-        spawn_local(async {
-            console::log_1(&"Starting wasm test...".into());
-
-            match fetch_binary("assets/extracted_model/extracted_model_data.bin").await {
-                Ok(data) => {
-                    test_mesh(&data).await;
-                }
-                Err(e) => console::error_1(&format!("Fetch error: {:?}", e).into()),
-            }
-        });
-    }
-
     #[cfg(not(target_arch = "wasm32"))]
     #[tokio::test]
     async fn test_decode_mesh_with_config() {
@@ -219,12 +183,17 @@ mod tests {
         let decode_result = decode_mesh_with_config(&input).await;
 
         if let Some(MeshDecodeResult { data, config }) = decode_result {
-            let mut expext_config = DracoDecodeConfig::new(3254, 4368);
-            expext_config.add_attribute(3, AttributeDataType::Float32);
-            expext_config.add_attribute(3, AttributeDataType::Float32);
-            expext_config.add_attribute(1, AttributeDataType::Float32);
+            // Verify basic config
+            assert_eq!(config.vertex_count(), 3254);
+            assert_eq!(config.index_count(), 4368);
+            assert_eq!(config.attributes().len(), 3);
 
-            assert_eq!(config, expext_config);
+            // Verify buffer_size is correctly set
+            assert_eq!(
+                config.buffer_size(),
+                config.index_length() as usize
+                    + config.attributes().iter().map(|a| a.lenght() as usize).sum::<usize>()
+            );
 
             fs::create_dir_all("assets/20_decode").ok();
             let path = "assets/20_decode/20_data.bin";

@@ -1,4 +1,4 @@
-# draco_decoder 
+# draco_decoder
 
 `draco_decoder` is a Rust library for decoding Draco compressed meshes. It provides native and WebAssembly (WASM) support with efficient bindings to the official Draco C++ library.
 
@@ -13,97 +13,85 @@
 
 This design provides a unified Rust API while seamlessly switching between native and WASM implementations under the hood.
 
-## build guide
-- install essential for cpp develop (cmake, cpp compiler, ..) 
-- cargo build 
+## Build Guide
 
-now it has passed all lateast platform build. but I'm not sure how to make installation guide to fit all platform.
+- Install essential tools for C++ development (cmake, C++ compiler, etc.)
+- `cargo build`
 
-⚠️ Warning:
-This crate currently work in progress, I have not tested on many devices of building.  now on windows it only support build on MSVC, and it may have some build issues. 
+This crate has passed builds on the latest platforms. On Windows, only MSVC is supported.
 
-⚠️ Warning:
-On wasm, due to the multi-threaded interaction between Rust and JS, encoded data will be copied once when transferring from Rust to JS. When multi-threaded Draco wasm completes decoding and passes it back to Rust, a second copy occurs. This process inevitably causes performance overhead. Since supporting SharedArrayBuffer in browser environments requires cross-origin isolation, currently this is the only viable solution.
+## Usage
 
-
-## native/wasm usage
-
-### async api
+### Async API
 
 ```rust
-use draco_decoder::{DracoDecodeConfig, AttributeDataType, decode_mesh};
-
-// some async wrapper
-
-let mut config = DracoDecodeConfig::new(vertex_count, index_count);
-
-// Add attributes to decode (dimention and data type)
-config.add_attribute(dim, AttributeDataType::Float32);
-config.add_attribute(dim, AttributeDataType::Float32);
+use draco_decoder::decode_mesh_with_config;
 
 // Your Draco-encoded binary mesh data
 let data: &[u8] = /* your Draco encoded data here */;
 
-// Asynchronously decode the mesh data
-let buf = decode_mesh(data, &config).await;
-
-// wrapper end
+// Decode the mesh data asynchronously
+if let Some(result) = decode_mesh_with_config(data).await {
+    let decoded_data = result.data;      // Vec<u8> - decoded mesh buffer
+    let config = result.config;          // DracoDecodeConfig - mesh metadata
+    
+    println!("Vertex count: {}", config.vertex_count());
+    println!("Index count: {}", config.index_count());
+    println!("Buffer size: {}", config.buffer_size());
+}
 ```
 
-### sync api
+### Sync API (Native only)
 
 ```rust
-use draco_decoder::{DracoDecodeConfig, AttributeDataType, decode_mesh};
-
-let mut config = DracoDecodeConfig::new(vertex_count, index_count);
-
-// Add attributes to decode (dimention and data type)
-config.add_attribute(dim, AttributeDataType::Float32);
-config.add_attribute(dim, AttributeDataType::Float32);
+use draco_decoder::decode_mesh_with_config_sync;
 
 // Your Draco-encoded binary mesh data
 let data: &[u8] = /* your Draco encoded data here */;
 
-// decode the mesh data
-let buf = decode_mesh_sync(data, &config)
+// Decode the mesh data synchronously
+if let Some(result) = decode_mesh_with_config_sync(data) {
+    let decoded_data = result.data;
+    let config = result.config;
+}
 ```
-In certain cases, undecoded glTF primitive parameters are unreliable for configuring Draco, which can cause significant issues. To achieve zero-copy data, Rust must first allocate memory, but the required memory length cannot be determined through configuration. However, in Draco, obtaining the length would require a full decoding pass—resulting in two separate decoding operations. To address this, I designed a caching mechanism within the FFI that splits the decoding process into: decoding → generating configuration → allocating memory and copying data. The current decoding wrapper may still have some issues that need testing.
 
-### async api
+### DracoDecodeConfig
+
+The `DracoDecodeConfig` provides metadata about the decoded mesh:
 
 ```rust
-use draco_decoder::{DracoDecodeConfig, AttributeDataType, decode_mesh_with_config};
+// Access mesh information
+let vertex_count = config.vertex_count();
+let index_count = config.index_count();
+let buffer_size = config.buffer_size();
+let index_length = config.index_length();
 
-// Your Draco-encoded binary mesh data
-let data: &[u8] = /* your Draco encoded data here */;
-
-// Asynchronously decode the mesh data
-let MeshDecodeResult{data, config} = decode_mesh_with_config(data).await;
-
-// config is origin decodeconfig
-
-// wrapper end
-```
-### sync api
-
-```rust
-use draco_decoder::{DracoDecodeConfig, AttributeDataType, decode_mesh_with_config_sync};
-
-// Your Draco-encoded binary mesh data
-let data: &[u8] = /* your Draco encoded data here */;
-
-// decode the mesh data
-let MeshDecodeResult{data, config} = decode_mesh_with_config_sync(data, &config)
+// Access attributes
+for attr in config.attributes() {
+    println!("Attribute - dim: {}, offset: {}, length: {}", 
+        attr.dim(), attr.offset(), attr.lenght());
+}
 ```
 
+## How It Works
+
+The decoder uses a caching mechanism within the FFI that splits the decoding process into:
+
+1. **Decode** - Parse the Draco data
+2. **Generate Config** - Extract mesh metadata (vertex count, attributes, buffer size)
+3. **Allocate & Copy** - Allocate exact memory and copy decoded data
+
+This approach achieves zero-copy data transfer since Rust can allocate the exact required memory based on the decoded metadata.
 
 ## Performance
 
-The performance of draco_decoder has been measured under different environments:
 | Environment            | Typical Decoding Time |
 | ---------------------- | --------------------- |
 | Native (Release Build) | 3 ms – 7 ms           |
 | WebAssembly (WASM)     | 30 ms – 50 ms         |
 
+## Warnings
 
-
+- This crate is work in progress and has not been extensively tested across all platforms.
+- On WASM, data transfer between Rust and JS Worker incurs copy overhead. Using SharedArrayBuffer would avoid this but requires cross-origin isolation in browsers.

@@ -17,7 +17,7 @@ mod cpp {
     }
 
     unsafe extern "C++" {
-        include!("draco_decoder/include/decoder_api.h");
+        include!("decoder_api.h");
 
         type DracoMesh;
 

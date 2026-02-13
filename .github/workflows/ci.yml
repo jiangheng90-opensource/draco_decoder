@@ -132,6 +132,23 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: third_party/draco_decoder_js/package-lock.json
+
+      - name: Build draco_decoder_js
+        run: |
+          npm ci
+          npm run build
+        working-directory: third_party/draco_decoder_js
+
+      - name: Copy index.es.js
+        run: |
+          cp third_party/draco_decoder_js/dist/index.es.js javascript/
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:

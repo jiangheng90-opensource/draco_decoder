@@ -84,5 +84,6 @@ fn main() {
 
     println!("cargo:rerun-if-changed=cpp/decoder_api.cc");
     println!("cargo:rerun-if-changed=include/decoder_api.h");
+    println!("cargo:rerun-if-changed=include/draco_mesh.hpp");
     println!("cargo:rerun-if-changed=src/ffi.rs");
 }

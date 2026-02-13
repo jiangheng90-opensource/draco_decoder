@@ -1,5 +1,6 @@
 #pragma once
 #include "rust/cxx.h"
+#include "draco_mesh.hpp"
 #include <cstdint>
 #include <vector>
 #include <memory>
@@ -7,24 +8,6 @@
 // Forward declarations - defined in ffi.rs.h
 struct MeshAttribute;
 struct MeshConfig;
-
-// Forward declaration for draco::Mesh
-namespace draco {
-class Mesh;
-}
-
-// DracoMesh class - wraps draco::Mesh
-// This must be defined here for cxx to see complete type for UniquePtr
-#ifndef DRACO_MESH_DEFINED
-#define DRACO_MESH_DEFINED
-class DracoMesh {
-public:
-  std::unique_ptr<draco::Mesh> mesh;
-
-  explicit DracoMesh(std::unique_ptr<draco::Mesh> m);
-  ~DracoMesh();
-};
-#endif
 
 rust::Vec<uint8_t> decode_point_cloud(rust::Slice<const uint8_t> data);
 

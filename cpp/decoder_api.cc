@@ -1,4 +1,5 @@
 #include "decoder_api.h"
+#include "draco_mesh.hpp"
 #include "draco_decoder/src/ffi.rs.h"
 
 #include "draco/attributes/geometry_attribute.h"

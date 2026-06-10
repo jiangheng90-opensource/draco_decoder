@@ -118,7 +118,7 @@ impl DracoDecodeConfig {
     /// Creates a new config with a pre-computed buffer size.
     ///
     /// Used internally when decoding from C++ FFI.
-    pub(crate) fn new(vertex_count: u32, index_count: u32, buffer_size: usize) -> Self {
+    pub fn new(vertex_count: u32, index_count: u32, buffer_size: usize) -> Self {
         let index_length = if index_count <= u16::MAX as u32 {
             index_count as usize * 2
         } else {

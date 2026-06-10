@@ -142,7 +142,7 @@ impl DracoDecodeConfig {
     /// Adds an attribute with specified offset and length.
     ///
     /// Used internally when receiving attribute data from C++ FFI.
-    pub(crate) fn add_attribute(
+    pub fn add_attribute(
         &mut self,
         dim: u32,
         data_type: AttributeDataType,

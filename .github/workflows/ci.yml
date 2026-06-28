@@ -120,8 +120,28 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Cache Draco install
+        uses: actions/cache@v4
+        with:
+          path: third_party/install
+          key: ${{ runner.os }}-draco-install-${{ hashFiles('third_party/draco/src/**', 'build.rs') }}
+
       - name: Run tests
         run: cargo test --lib
+
+      - name: Verify Draco cache reuse
+        shell: bash
+        run: |
+          echo "Before clean:"
+          ls -la third_party/install/include 2>/dev/null || true
+          find third_party/install -type f \( -name "*.a" -o -name "*.lib" \) 2>/dev/null || true
+          cargo clean -p draco_decoder
+          echo "After clean:"
+          ls -la third_party/install/include 2>/dev/null || true
+          find third_party/install -type f \( -name "*.a" -o -name "*.lib" \) 2>/dev/null || true
+          echo "Building release..."
+          cargo build --release --lib 2>&1 | tee draco_build.log
+          grep -q "Using cached Draco" draco_build.log
 
   # Test WASM platform
   test-wasm:
@@ -245,6 +265,12 @@ jobs:
         with:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Draco install
+        uses: actions/cache@v4
+        with:
+          path: third_party/install
+          key: ${{ runner.os }}-draco-install-${{ hashFiles('third_party/draco/src/**', 'build.rs') }}
 
       - name: Build release
         run: cargo build --release --lib

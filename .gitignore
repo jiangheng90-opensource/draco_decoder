@@ -1,6 +1,7 @@
 /target
 examples/wasm/assets/
 examples/wasm/target/
+third_party/install/
 *.DS_Store
 .vscode
 Cargo.lock

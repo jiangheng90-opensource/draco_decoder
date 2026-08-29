@@ -5,3 +5,5 @@ third_party/install/
 *.DS_Store
 .vscode
 Cargo.lock
+third_party/draco_decoder_js/node_modules/
+third_party/draco_decoder_js/dist/

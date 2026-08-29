@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draco Decode Test</title>
+</head>
+
+<body>
+    <h1>Draco Decode Test</h1>
+    <input type="file" id="fileInput" />
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { decodeDracoMeshInWorker, decodeDracoMeshInWorkerWithConfig } from './dist/index.es.js';
+
+        const fileInput = document.getElementById('fileInput');
+        const output = document.getElementById('output');
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const arrayBuffer = await file.arrayBuffer();
+            try {
+                output.textContent = 'Decoding...\n';
+                const startTime = performance.now();
+
+                const { decoded, config } = await decodeDracoMeshInWorkerWithConfig(new Uint8Array(arrayBuffer));
+                const endTime = performance.now();
+
+                output.textContent += `Decoding took ${(endTime - startTime).toFixed(2)} ms\n\n`;
+                output.textContent += `Vertex count: ${config.vertex_count}\n`;
+                output.textContent += `Index count: ${config.index_count}\n`;
+                output.textContent += `Attributes: ${config.attributes.length}\n\n`;
+                output.textContent += `Attributes info:\n`;
+                config.attributes.forEach((attr, i) => {
+                    output.textContent += `  [${i}] unique_id=${attr.unique_id}, data_type=${attr.data_type}, dim=${attr.dim}, length=${attr.length}, offset=${attr.offset}\n`;
+                });
+
+                const blob = new Blob([decoded], { type: 'application/octet-stream' });
+
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'extracted_model_data.bin';
+                document.body.appendChild(a);
+                a.click();
+
+                URL.revokeObjectURL(url);
+                a.remove();
+            } catch (e) {
+                output.textContent = 'Error: ' + e.message;
+            }
+        });
+    </script>
+</body>
+
+</html>

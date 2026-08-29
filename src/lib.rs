@@ -97,6 +97,17 @@ pub async fn decode_mesh_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
     wasm::decode_mesh_wasm_worker_with_config(data).await
 }
 
+/// Decodes a Draco compressed mesh asynchronously in the CURRENT context
+/// (WASM) — no dedicated worker is spawned.
+///
+/// Intended for hosts that already run inside their own Web Worker (e.g. a
+/// worker pool): the decode runs on the calling thread. On the main thread,
+/// prefer [`decode_mesh_with_config`], which offloads to a worker.
+#[cfg(target_arch = "wasm32")]
+pub async fn decode_mesh_local_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
+    wasm::decode_mesh_local_with_config(data).await
+}
+
 #[cfg(test)]
 mod tests {
 

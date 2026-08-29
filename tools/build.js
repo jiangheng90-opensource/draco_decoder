@@ -23,6 +23,13 @@ console.log('Copying index.es.js...');
 fs.copyFileSync(srcJsFile, destJsFile);
 console.log('Copied index.es.js to javascript/');
 
+// Copy core.es.js (pure in-context decode entry, no worker)
+const srcCoreFile = path.join(jsDir, 'dist', 'core.es.js');
+const destCoreFile = path.join(rootDir, 'javascript', 'core.es.js');
+console.log('Copying core.es.js...');
+fs.copyFileSync(srcCoreFile, destCoreFile);
+console.log('Copied core.es.js to javascript/');
+
 // Copy draco_decoder.wasm
 console.log('Copying draco_decoder.wasm...');
 fs.mkdirSync(destWasmDir, { recursive: true });

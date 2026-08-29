@@ -5,10 +5,18 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 export default {
     build: {
         lib: {
-            entry: 'src/index.js',
+            entry: {
+                // Worker-hosted API (spawns the dedicated decoder worker,
+                // lazily on first call).
+                index: 'src/index.js',
+                // Pure in-context decode API — no worker. Embedded by hosts
+                // that already run inside their own worker.
+                core: 'src/dracoCore.js',
+            },
             name: 'DracoDecoderJS',
-            fileName: (format) => `index.${format}.js`,
-            formats: ['es', 'umd'],
+            fileName: (format, entryName) => `${entryName}.${format}.js`,
+            // UMD requires a single entry; ES-only now that there are two.
+            formats: ['es'],
         },
         rollupOptions: {
             external: [],

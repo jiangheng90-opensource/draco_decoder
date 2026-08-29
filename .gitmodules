@@ -1,3 +1,4 @@
 [submodule "third_party/draco"]
 	path = third_party/draco
 	url = https://github.com/google/draco.git
+	ignore = untracked

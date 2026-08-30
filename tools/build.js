@@ -37,16 +37,15 @@ fs.copyFileSync(srcWasmFile, destWasmFile);
 console.log('Copied draco_decoder.wasm to javascript/draco3d/');
 
 // The Rust side (src/wasm.rs) embeds these bundles verbatim in a JS template
-// literal. It escapes backslashes and backticks itself, but NOT "${", which
-// would start a template interpolation in the eval'd code. Fail the build if
-// the minifier emitted one (adjust terser options instead of shipping it).
+// literal. It escapes backslashes and backticks itself — and the worker
+// inline string legitimately contains backticks — but NOT "${", which would
+// start a template interpolation in the eval'd code. Fail the build if the
+// minifier emitted one (adjust terser options instead of shipping it).
 for (const file of [destJsFile, destCoreFile]) {
     const bundle = fs.readFileSync(file, 'utf8');
-    const bad = ['${', '`'].filter((s) => bundle.includes(s));
-    if (bad.length > 0) {
+    if (bundle.includes('${')) {
         throw new Error(
-            file + ' contains raw ' + bad.join(' and ') +
-            ' sequence(s); adjust the vite/terser config so the bundle is safe to embed'
+            file + ' contains a raw ${ sequence; adjust the vite/terser config so the bundle is safe to embed'
         );
     }
 }

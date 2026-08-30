@@ -15,6 +15,8 @@ exclude = [
     "third_party/draco/javascript/**",
     "third_party/draco/maya/**",
     "third_party/draco/unity/**",
+    "third_party/draco_decoder_js/node_modules/**",
+    "third_party/draco_decoder_js/dist/**",
     "assets/**",
     "target/**",
     ".git/**",

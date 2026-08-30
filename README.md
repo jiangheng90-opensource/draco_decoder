@@ -8,8 +8,7 @@
   The native part uses [`cxx`](https://cxx.rs/) to create safe and ergonomic FFI bindings that directly connect to Draco's C++ decoding library. This allows efficient and zero-copy mesh decoding in native environments.
 
 - **WASM:**  
-  For WebAssembly targets, `draco_decoder` leverages the official Draco Emscripten build. It uses a JavaScript Worker to run the Draco decoder asynchronously, enabling non-blocking mesh decoding in the browser. The JavaScript implementation is available in a separate repository:  
-  [https://github.com/jiangheng90/draco_decoder_js.git](https://github.com/jiangheng90/draco_decoder_js.git)
+  For WebAssembly targets, `draco_decoder` leverages the official Draco Emscripten build, bundled as self-contained ES modules (`javascript/`, vendored from the in-repo JS project at `third_party/draco_decoder_js`). Two decode paths are available: a dedicated JavaScript Worker (default, non-blocking on the main thread), or in-context decoding for hosts that already run inside their own worker.
 
 This design provides a unified Rust API while seamlessly switching between native and WASM implementations under the hood.
 
@@ -53,6 +52,19 @@ let data: &[u8] = /* your Draco encoded data here */;
 if let Some(result) = decode_mesh_with_config_sync(data) {
     let decoded_data = result.data;
     let config = result.config;
+}
+```
+
+### In-context API (WASM, no worker)
+
+```rust
+use draco_decoder::decode_mesh_local_with_config;
+
+// Runs the decode in the CURRENT context without spawning the dedicated
+// worker. Intended for hosts that already run inside their own Web Worker
+// (e.g. a worker pool); on the main thread, prefer `decode_mesh_with_config`.
+if let Some(result) = decode_mesh_local_with_config(data).await {
+    // same MeshDecodeResult as the worker path
 }
 ```
 

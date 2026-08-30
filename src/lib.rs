@@ -136,11 +136,18 @@ mod tests {
         );
 
         let floats: Vec<f32> = output
-            .chunks_exact(4)
-            .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|bytes| f32::from_le_bytes(*bytes))
             .collect();
 
-        let actual: HashSet<[i32; 3]> = floats.chunks_exact(3).map(quantize).collect();
+        let actual: HashSet<[i32; 3]> = floats
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|v| quantize(v))
+            .collect();
 
         let expected: HashSet<[i32; 3]> = [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]]
             .iter()

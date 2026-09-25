@@ -100,7 +100,16 @@ fn parse_decode_config(config_obj: &JsValue) -> Result<DracoDecodeConfig, JsValu
 
         let attr_data_type = AttributeDataType::from_draco_data_type(data_type);
 
-        config.add_attribute(dim, attr_data_type, offset, length);
+        // The embedded bundles don't emit unique_id in the config objects
+        // (they iterate attributes by unique id 0..N, which already assumes
+        // contiguous ids); when absent, fall back to the array index.
+        let unique_id = js_sys::Reflect::get(&attr_obj, &JsValue::from_str("unique_id"))?
+            .as_f64()
+            .map(|v| v as u32);
+        match unique_id {
+            Some(id) => config.add_attribute_with_id(dim, attr_data_type, offset, length, id),
+            None => config.add_attribute(dim, attr_data_type, offset, length),
+        }
     }
 
     Ok(config)

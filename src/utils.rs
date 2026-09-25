@@ -60,10 +60,11 @@ pub struct MeshAttribute {
     data_type: AttributeDataType,
     offset: u32,
     lenght: u32,
+    unique_id: u32,
 }
 
 impl MeshAttribute {
-    /// Creates a new mesh attribute.
+    /// Creates a new mesh attribute without a Draco unique id (defaults to 0).
     ///
     /// # Arguments
     ///
@@ -72,11 +73,23 @@ impl MeshAttribute {
     /// * `offset` - Byte offset in the decoded buffer where this attribute starts
     /// * `lenght` - Total byte length of this attribute data
     pub fn new(dim: u32, data_type: AttributeDataType, offset: u32, lenght: u32) -> Self {
+        Self::new_with_unique_id(dim, data_type, offset, lenght, 0)
+    }
+
+    /// Creates a new mesh attribute carrying the Draco attribute unique id.
+    pub fn new_with_unique_id(
+        dim: u32,
+        data_type: AttributeDataType,
+        offset: u32,
+        lenght: u32,
+        unique_id: u32,
+    ) -> Self {
         Self {
             dim,
             data_type,
             offset,
             lenght,
+            unique_id,
         }
     }
 
@@ -98,6 +111,15 @@ impl MeshAttribute {
     /// Returns the number of components per vertex.
     pub fn dim(&self) -> u32 {
         self.dim
+    }
+
+    /// Returns the Draco attribute unique id.
+    ///
+    /// Attributes written by this crate are sorted by unique id, so for
+    /// encoders that assign contiguous ids starting at 0 the unique id equals
+    /// the attribute's index in [`DracoDecodeConfig::attributes`].
+    pub fn unique_id(&self) -> u32 {
+        self.unique_id
     }
 }
 
@@ -141,6 +163,9 @@ impl DracoDecodeConfig {
 
     /// Adds an attribute with specified offset and length.
     ///
+    /// The unique id is auto-assigned as the attribute's index, which matches
+    /// encoders that assign contiguous unique ids starting at 0.
+    ///
     /// Used internally when receiving attribute data from C++ FFI.
     pub fn add_attribute(
         &mut self,
@@ -149,12 +174,21 @@ impl DracoDecodeConfig {
         offset: u32,
         length: u32,
     ) {
-        let attribute = MeshAttribute {
-            dim,
-            data_type,
-            offset,
-            lenght: length,
-        };
+        let unique_id = self.attributes.len() as u32;
+        self.add_attribute_with_id(dim, data_type, offset, length, unique_id);
+    }
+
+    /// Adds an attribute carrying its Draco attribute unique id.
+    pub fn add_attribute_with_id(
+        &mut self,
+        dim: u32,
+        data_type: AttributeDataType,
+        offset: u32,
+        length: u32,
+        unique_id: u32,
+    ) {
+        let attribute =
+            MeshAttribute::new_with_unique_id(dim, data_type, offset, length, unique_id);
         self.attributes.push(attribute);
     }
 

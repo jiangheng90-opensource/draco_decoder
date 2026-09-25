@@ -1,11 +1,19 @@
-import { parseDracoMesh, parseDracoMeshWithConfig } from './dracoCore.js';
+import { parseDracoMesh, parseDracoMeshWithConfig, parseDracoPointCloudWithConfig } from './dracoCore.js';
 
 self.onmessage = async (e) => {
-    const { id, view, bufferLength, withConfig } = e.data;
+    const { id, view, bufferLength, withConfig, pointCloud } = e.data;
 
     try {
         let result;
-        if (withConfig) {
+        if (pointCloud) {
+            result = await parseDracoPointCloudWithConfig(view);
+            self.postMessage({
+                id,
+                success: true,
+                decoded: result.decoded,
+                config: result.config
+            }, [result.decoded.buffer]);
+        } else if (withConfig) {
             result = await parseDracoMeshWithConfig(view);
             self.postMessage({
                 id,

@@ -1,6 +1,6 @@
 # draco_decoder
 
-`draco_decoder` is a Rust library for decoding Draco compressed meshes. It provides native and WebAssembly (WASM) support with efficient bindings to the official Draco C++ library.
+`draco_decoder` is a Rust library for decoding Draco compressed meshes and point clouds. It provides native and WebAssembly (WASM) support with efficient bindings to the official Draco C++ library.
 
 ## Overview
 
@@ -9,6 +9,9 @@
 
 - **WASM:**  
   For WebAssembly targets, `draco_decoder` leverages the official Draco Emscripten build, bundled as self-contained ES modules (`javascript/`, vendored from the in-repo JS project at `third_party/draco_decoder_js`). Two decode paths are available: a dedicated JavaScript Worker (default, non-blocking on the main thread), or in-context decoding for hosts that already run inside their own worker.
+
+- **Point clouds:**  
+  Point-cloud bitstreams (`POINT_CLOUD` geometry) are supported on native and WASM via the `decode_point_cloud_with_config` family: no index section (`index_count` is always 0, `vertex_count` is the point count) and attributes are sorted by their Draco unique id.
 
 This design provides a unified Rust API while seamlessly switching between native and WASM implementations under the hood.
 
@@ -67,6 +70,26 @@ if let Some(result) = decode_mesh_local_with_config(data).await {
     // same MeshDecodeResult as the worker path
 }
 ```
+
+### Point clouds (native and WASM)
+
+```rust
+use draco_decoder::decode_point_cloud_with_config;
+
+// Your Draco-encoded point cloud data
+let data: &[u8] = /* your Draco encoded point cloud here */;
+
+// Decode the point cloud asynchronously
+if let Some(result) = decode_point_cloud_with_config(data).await {
+    let config = result.config;
+    println!("Point count: {}", config.vertex_count()); // index_count is 0
+    for attr in config.attributes() {
+        println!("attribute unique id {}: dim {}", attr.unique_id(), attr.dim());
+    }
+}
+```
+
+On WASM the point-cloud API mirrors the mesh one: `decode_point_cloud_with_config` offloads to the dedicated decoder worker (main-thread default), and `decode_point_cloud_local_with_config` decodes in the current context for hosts already running inside their own Web Worker.
 
 ### DracoDecodeConfig
 

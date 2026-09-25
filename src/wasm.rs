@@ -178,6 +178,91 @@ pub async fn decode_mesh_wasm_worker_with_config(data: &[u8]) -> Option<crate::M
     }
 }
 
+/// Calls `decodeDracoPointCloudInWorkerWithConfig` on the worker-hosted bundle.
+async fn decode_draco_point_cloud_from_embedded_js_with_config(
+    data: &js_sys::Uint8Array,
+) -> Result<(Vec<u8>, DracoDecodeConfig), JsValue> {
+    let module = get_js_module().await?;
+
+    let decode_fn = js_sys::Reflect::get(
+        &module,
+        &JsValue::from_str("decodeDracoPointCloudInWorkerWithConfig"),
+    )?
+    .dyn_into::<js_sys::Function>()?;
+
+    let this = JsValue::NULL;
+    let result = decode_fn.call1(&this, data)?;
+    let decode_promise: Promise = result.dyn_into()?;
+    let out_obj = JsFuture::from(decode_promise).await?;
+
+    // Parse the result: { decoded: Uint8Array, config: Object }
+    let decoded_array =
+        js_sys::Reflect::get(&out_obj, &JsValue::from_str("decoded"))?.dyn_into::<Uint8Array>()?;
+    let config_obj = js_sys::Reflect::get(&out_obj, &JsValue::from_str("config"))?;
+
+    Ok((decoded_array.to_vec(), parse_decode_config(&config_obj)?))
+}
+
+/// Calls `parseDracoPointCloudWithConfig` on the pure-decode bundle, running
+/// the decode in the current context (no worker round-trip).
+async fn decode_draco_point_cloud_local_with_config(
+    data: &js_sys::Uint8Array,
+) -> Result<(Vec<u8>, DracoDecodeConfig), JsValue> {
+    let module = get_core_js_module().await?;
+
+    let decode_fn = js_sys::Reflect::get(
+        &module,
+        &JsValue::from_str("parseDracoPointCloudWithConfig"),
+    )?
+    .dyn_into::<js_sys::Function>()?;
+
+    let this = JsValue::NULL;
+    let result = decode_fn.call1(&this, data)?;
+    let decode_promise: Promise = result.dyn_into()?;
+    let out_obj = JsFuture::from(decode_promise).await?;
+
+    let decoded_array =
+        js_sys::Reflect::get(&out_obj, &JsValue::from_str("decoded"))?.dyn_into::<Uint8Array>()?;
+    let config_obj = js_sys::Reflect::get(&out_obj, &JsValue::from_str("config"))?;
+
+    Ok((decoded_array.to_vec(), parse_decode_config(&config_obj)?))
+}
+
+/// Decodes a Draco point cloud via the bundle's dedicated worker.
+pub async fn decode_point_cloud_wasm_worker_with_config(
+    data: &[u8],
+) -> Option<crate::MeshDecodeResult> {
+    let js_array = Uint8Array::from(data);
+
+    match decode_draco_point_cloud_from_embedded_js_with_config(&js_array).await {
+        Ok((decoded, config)) => Some(crate::MeshDecodeResult {
+            data: decoded,
+            config,
+        }),
+        Err(err) => {
+            web_sys::console::error_1(&err);
+            None
+        }
+    }
+}
+
+/// Decodes a Draco point cloud in the CURRENT context — for hosts that
+/// already run inside their own Web Worker.
+pub async fn decode_point_cloud_local_with_config(data: &[u8]) -> Option<crate::MeshDecodeResult> {
+    let js_array = Uint8Array::from(data);
+
+    match decode_draco_point_cloud_local_with_config(&js_array).await {
+        Ok((decoded, config)) => Some(crate::MeshDecodeResult {
+            data: decoded,
+            config,
+        }),
+        Err(err) => {
+            web_sys::console::error_1(&err);
+            None
+        }
+    }
+}
+
 pub async fn decode_mesh_local_with_config(data: &[u8]) -> Option<crate::MeshDecodeResult> {
     let js_array = Uint8Array::from(data);
 

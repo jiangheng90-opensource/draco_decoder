@@ -288,3 +288,121 @@ export async function parseDracoMeshWithConfig(data) {
         config: config
     };
 }
+
+/// Point cloud variant of [`parseDracoMeshWithConfig`]: no face/index
+/// section, attributes packed from offset 0, `index_count` always 0.
+export async function parseDracoPointCloudWithConfig(data) {
+    await initDracoDecoder();
+
+    const decoder = new decoderModule.Decoder();
+    const buffer = new decoderModule.DecoderBuffer();
+    buffer.Init(new Int8Array(data), data.length);
+
+    const geometryType = decoder.GetEncodedGeometryType(buffer);
+    if (geometryType !== decoderModule.POINT_CLOUD) {
+        throw new Error("Unsupported geometry type");
+    }
+
+    const pointCloud = new decoderModule.PointCloud();
+    const status = decoder.DecodeBufferToPointCloud(buffer, pointCloud);
+    if (!status.ok()) {
+        decoderModule.destroy(pointCloud);
+        decoderModule.destroy(decoder);
+        decoderModule.destroy(buffer);
+        throw new Error("Draco decoding failed: " + status.error_msg());
+    }
+    decoderModule.destroy(buffer);
+
+    const attrCount = pointCloud.num_attributes();
+    const numPoints = pointCloud.num_points();
+
+    let totalSize = 0;
+
+    const attributes = [];
+    for (let i = 0; i < attrCount; i++) {
+        const attr = decoder.GetAttributeByUniqueId(pointCloud, i);
+        const uniqueId = attr.unique_id();
+        const dataType = attr.data_type();
+        const dim = attr.num_components();
+
+        const attrLength = dim * numPoints * sizeofDataType(dataType);
+        totalSize += attrLength;
+
+        attributes.push({
+            dim: dim,
+            data_type: dataType,
+            offset: 0,
+            length: attrLength,
+            unique_id: uniqueId
+        });
+    }
+
+    attributes.sort((a, b) => a.unique_id - b.unique_id);
+
+    let currentOffset = 0;
+    for (const attr of attributes) {
+        attr.offset = currentOffset;
+        currentOffset += attr.length;
+    }
+
+    const outBuffer = new ArrayBuffer(totalSize);
+    const view = new DataView(outBuffer);
+    let offset = 0;
+
+    const writeScalar = (val, type) => {
+        switch (type) {
+            case decoderModule.DT_INT8: view.setInt8(offset, val); offset += 1; break;
+            case decoderModule.DT_UINT8: view.setUint8(offset, val); offset += 1; break;
+            case decoderModule.DT_INT16: view.setInt16(offset, val, true); offset += 2; break;
+            case decoderModule.DT_UINT16: view.setUint16(offset, val, true); offset += 2; break;
+            case decoderModule.DT_INT32: view.setInt32(offset, val, true); offset += 4; break;
+            case decoderModule.DT_UINT32: view.setUint32(offset, val, true); offset += 4; break;
+            case decoderModule.DT_FLOAT32: view.setFloat32(offset, val, true); offset += 4; break;
+            case decoderModule.DT_FLOAT64: view.setFloat64(offset, val, true); offset += 8; break;
+            default: throw new Error("Unknown type");
+        }
+    };
+
+    for (let i = 0; i < attrCount; i++) {
+        const attr = decoder.GetAttributeByUniqueId(pointCloud, i);
+        const type = attr.data_type();
+        const dim = attr.num_components();
+        const valueCount = numPoints * dim;
+
+        const typeMap = {
+            [decoderModule.DT_FLOAT32]: { arrayType: decoderModule.DracoFloat32Array, fn: 'GetAttributeFloatForAllPoints' },
+            [decoderModule.DT_INT32]: { arrayType: decoderModule.DracoInt32Array, fn: 'GetAttributeInt32ForAllPoints' },
+            [decoderModule.DT_UINT32]: { arrayType: decoderModule.DracoUInt32Array, fn: 'GetAttributeUInt32ForAllPoints' },
+            [decoderModule.DT_INT16]: { arrayType: decoderModule.DracoInt16Array, fn: 'GetAttributeInt16ForAllPoints' },
+            [decoderModule.DT_UINT16]: { arrayType: decoderModule.DracoUInt16Array, fn: 'GetAttributeUInt16ForAllPoints' },
+            [decoderModule.DT_INT8]: { arrayType: decoderModule.DracoInt8Array, fn: 'GetAttributeInt8ForAllPoints' },
+            [decoderModule.DT_UINT8]: { arrayType: decoderModule.DracoUInt8Array, fn: 'GetAttributeUInt8ForAllPoints' }
+        };
+
+        if (typeMap[type]) {
+            const { arrayType, fn } = typeMap[type];
+            const attrArray = new arrayType();
+            decoder[fn](pointCloud, attr, attrArray);
+            for (let j = 0; j < valueCount; j++) {
+                writeScalar(attrArray.GetValue(j), type);
+            }
+            decoderModule.destroy(attrArray);
+        }
+    }
+
+    decoderModule.destroy(pointCloud);
+    decoderModule.destroy(decoder);
+
+    const config = {
+        vertex_count: numPoints,
+        index_count: 0,
+        index_length: 0,
+        buffer_size: totalSize,
+        attributes: attributes
+    };
+
+    return {
+        decoded: new Uint8Array(outBuffer, 0, offset),
+        config: config
+    };
+}

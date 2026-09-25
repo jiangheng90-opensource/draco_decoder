@@ -36,34 +36,168 @@ static size_t sizeof_data_type(draco::DataType type) {
   }
 }
 
-rust::Vec<uint8_t> decode_point_cloud(rust::Slice<const uint8_t> data) {
+// DracoPointCloud implementation
+DracoPointCloud::DracoPointCloud(std::unique_ptr<draco::PointCloud> pc)
+    : point_cloud(std::move(pc)) {}
+DracoPointCloud::~DracoPointCloud() = default;
+
+std::unique_ptr<DracoPointCloud> create_point_cloud(rust::Slice<const uint8_t> data) {
   draco::DecoderBuffer buffer;
   buffer.Init(reinterpret_cast<const char *>(data.data()), data.size());
 
   draco::Decoder decoder;
   auto status_or_geometry = decoder.DecodePointCloudFromBuffer(&buffer);
   if (!status_or_geometry.ok()) {
-    return {};
+    return nullptr;
   }
 
-  std::unique_ptr<draco::PointCloud> pc = std::move(status_or_geometry).value();
+  return std::make_unique<DracoPointCloud>(std::move(status_or_geometry).value());
+}
 
-  const draco::PointAttribute *attr =
-      pc->GetNamedAttribute(draco::GeometryAttribute::POSITION);
-  if (!attr) {
-    return {};
+// Collects a point cloud's attributes sorted by unique_id. Shared by the
+// config and buffer-write paths so both see the same order and offsets.
+static std::vector<const draco::PointAttribute *>
+sorted_attributes(const draco::PointCloud &pc) {
+  std::vector<const draco::PointAttribute *> attrs;
+  attrs.reserve(pc.num_attributes());
+  for (int i = 0; i < pc.num_attributes(); ++i) {
+    attrs.push_back(pc.attribute(i));
+  }
+  std::sort(attrs.begin(), attrs.end(), [](const draco::PointAttribute *a,
+                                           const draco::PointAttribute *b) {
+    return a->unique_id() < b->unique_id();
+  });
+  return attrs;
+}
+
+bool compute_point_cloud_config(const DracoPointCloud &draco_pc, MeshConfig &config) {
+  const draco::PointCloud *pc = draco_pc.point_cloud.get();
+  if (!pc) {
+    return false;
   }
 
-  rust::Vec<uint8_t> out;
-  for (draco::PointIndex i(0); i < pc->num_points(); ++i) {
-    float point[3] = {0.0f};
-    attr->GetValue(attr->mapped_index(i), &point[0]);
-    uint8_t *ptr = reinterpret_cast<uint8_t *>(point);
-    for (size_t j = 0; j < sizeof(point); ++j) {
-      out.push_back(ptr[j]);
+  config.vertex_count = pc->num_points();
+  config.index_count = 0;
+  config.index_length = 0;
+
+  uint32_t current_offset = 0;
+  for (const draco::PointAttribute *attr : sorted_attributes(*pc)) {
+    MeshAttribute mesh_attr;
+
+    mesh_attr.dim = attr->num_components();
+    mesh_attr.unique_id = attr->unique_id();
+    mesh_attr.data_type = static_cast<int>(attr->data_type());
+
+    mesh_attr.offset = current_offset;
+    mesh_attr.length =
+        mesh_attr.dim * config.vertex_count * sizeof_data_type(attr->data_type());
+
+    config.attributes.push_back(mesh_attr);
+    current_offset += mesh_attr.length;
+  }
+
+  config.buffer_size = current_offset;
+  return true;
+}
+
+size_t decode_point_cloud_to_buffer(const DracoPointCloud &draco_pc, uint8_t *out_ptr,
+                                    size_t out_len) {
+  const draco::PointCloud *pc = draco_pc.point_cloud.get();
+  if (!pc) {
+    return 0;
+  }
+
+  uint8_t *out = out_ptr;
+  const size_t out_end = reinterpret_cast<size_t>(out_ptr) + out_len;
+
+  auto write_scalar = [&](const void *src, draco::DataType type) -> bool {
+    size_t size = sizeof_data_type(type);
+    if (reinterpret_cast<size_t>(out) + size > out_end)
+      return false;
+    memcpy(out, src, size);
+    out += size;
+    return true;
+  };
+
+  const int num_points = pc->num_points();
+
+  for (const draco::PointAttribute *attr : sorted_attributes(*pc)) {
+    const int dim = attr->num_components();
+    const draco::DataType type = attr->data_type();
+
+    for (draco::PointIndex j(0); j < num_points; ++j) {
+      switch (type) {
+      case draco::DT_INT8: {
+        int8_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_UINT8: {
+        uint8_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_INT16: {
+        int16_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_UINT16: {
+        uint16_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_INT32: {
+        int32_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_UINT32: {
+        uint32_t v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_FLOAT32: {
+        float v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      case draco::DT_FLOAT64: {
+        double v[4] = {};
+        attr->ConvertValue(attr->mapped_index(j), v);
+        for (int k = 0; k < dim; ++k)
+          if (!write_scalar(&v[k], type))
+            return 0;
+        break;
+      }
+      default:
+        return 0;
+      }
     }
   }
-  return out;
+
+  return static_cast<size_t>(out - out_ptr);
 }
 
 

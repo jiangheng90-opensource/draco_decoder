@@ -50,6 +50,15 @@ export function decodeDracoMeshInWorkerWithConfig(view) {
     });
 }
 
+export function decodeDracoPointCloudInWorkerWithConfig(view) {
+    return new Promise((resolve, reject) => {
+        const id = requestId++;
+        callbacks.set(id, { resolve, reject });
+
+        getWorker().postMessage({ id, view, withConfig: true, pointCloud: true }, [view.buffer]);
+    });
+}
+
 // Pure in-context decoding lives in the separate `core` bundle entry
 // (dracoCore.js → core.es.js) so hosts running inside their own worker do
 // not pull the inline-worker copy of the decoder into their scope.

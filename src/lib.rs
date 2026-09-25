@@ -59,6 +59,41 @@ pub async fn decode_mesh_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
     ffi::decode_mesh_with_config(data)
 }
 
+/// Decodes a Draco compressed point cloud asynchronously (native only).
+///
+/// Feeds the Draco bitstream through the native C++ decoder and extracts all
+/// point attributes, sorted by their Draco unique id. The result reuses
+/// [`MeshDecodeResult`]; for a point cloud `config.index_count()` is always
+/// 0 and `config.vertex_count()` is the point count.
+///
+/// # Arguments
+///
+/// * `data` - The Draco encoded point cloud data
+///
+/// # Returns
+///
+/// Returns `Some(MeshDecodeResult)` on success, `None` if decoding fails.
+///
+/// # Example
+///
+/// ```ignore
+/// use draco_decoder::decode_point_cloud_with_config;
+///
+/// async fn example() {
+///     let data: &[u8] = /* your Draco encoded point cloud */;
+///     if let Some(result) = decode_point_cloud_with_config(data).await {
+///         println!("Points: {}", result.config.vertex_count());
+///         for attr in result.config.attributes() {
+///             println!("attribute id {}: dim {}", attr.unique_id(), attr.dim());
+///         }
+///     }
+/// }
+/// ```
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn decode_point_cloud_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
+    ffi::decode_point_cloud_with_config(data)
+}
+
 /// Decodes a Draco compressed mesh synchronously (native only).
 ///
 /// This function automatically decodes the mesh and extracts metadata including
@@ -108,11 +143,31 @@ pub async fn decode_mesh_local_with_config(data: &[u8]) -> Option<MeshDecodeResu
     wasm::decode_mesh_local_with_config(data).await
 }
 
+/// Decodes a Draco compressed point cloud asynchronously (WASM).
+///
+/// Uses the bundle's dedicated decoder Worker, offloading the decode from the
+/// calling thread. Point-cloud counterpart of [`decode_mesh_with_config`];
+/// the result reuses [`MeshDecodeResult`] with `index_count` always 0 and
+/// attributes sorted by their Draco unique id.
+#[cfg(target_arch = "wasm32")]
+pub async fn decode_point_cloud_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
+    wasm::decode_point_cloud_wasm_worker_with_config(data).await
+}
+
+/// Decodes a Draco compressed point cloud asynchronously in the CURRENT
+/// context (WASM) — no dedicated worker is spawned.
+///
+/// Intended for hosts that already run inside their own Web Worker (e.g. a
+/// worker pool): the decode runs on the calling thread. On the main thread,
+/// prefer [`decode_point_cloud_with_config`], which offloads to a worker.
+#[cfg(target_arch = "wasm32")]
+pub async fn decode_point_cloud_local_with_config(data: &[u8]) -> Option<MeshDecodeResult> {
+    wasm::decode_point_cloud_local_with_config(data).await
+}
+
 #[cfg(test)]
 mod tests {
 
-    #[cfg(not(target_arch = "wasm32"))]
-    use super::ffi::decode_point_cloud_native;
     use std::collections::HashSet;
     use std::fs::{self};
 
@@ -125,17 +180,30 @@ mod tests {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn test_decode_point_cloud() {
+    #[tokio::test]
+    async fn test_decode_point_cloud_with_config() {
+        use crate::{AttributeDataType, decode_point_cloud_with_config};
+
         let input = fs::read("assets/pointcloud.drc").expect("Failed to read pointcloud.drc");
-        let output = decode_point_cloud_native(&input);
+        let Some(result) = decode_point_cloud_with_config(&input).await else {
+            panic!("point cloud decode failed");
+        };
 
-        assert!(
-            output.len().is_multiple_of(12),
-            "Expected output to be a multiple of 12 bytes (3 floats per point)"
-        );
+        assert_eq!(result.config.vertex_count(), 3);
+        assert_eq!(result.config.index_count(), 0);
+        assert_eq!(result.config.index_length(), 0);
+        assert_eq!(result.data.len(), result.config.buffer_size());
 
-        let floats: Vec<f32> = output
+        let attrs = result.config.attributes();
+        assert_eq!(attrs.len(), 1);
+        let pos = &attrs[0];
+        assert_eq!(pos.dim(), 3);
+        assert_eq!(pos.data_type(), AttributeDataType::Float32);
+        assert_eq!(pos.lenght(), 3 * 12);
+
+        let start = pos.offset() as usize;
+        let end = start + pos.lenght() as usize;
+        let floats: Vec<f32> = result.data[start..end]
             .as_chunks::<4>()
             .0
             .iter()
@@ -158,6 +226,47 @@ mod tests {
             actual, expected,
             "Decoded point cloud points do not match expected"
         );
+    }
+
+    /// Real-world draco point cloud extracted from a Cesium ion pnts tile
+    /// (asset 43978, Melbourne): POSITION (id 0, float32 vec3) + RGB (id 1,
+    /// uint8 vec3), 41214 points.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn test_decode_point_cloud_melbourne() {
+        use crate::{AttributeDataType, decode_point_cloud_with_config};
+
+        let input = fs::read("assets/melbourne_0_0.drc").expect("Failed to read melbourne_0_0.drc");
+        let Some(result) = decode_point_cloud_with_config(&input).await else {
+            panic!("point cloud decode failed");
+        };
+
+        assert_eq!(result.config.vertex_count(), 41214);
+        assert_eq!(result.config.index_count(), 0);
+        assert_eq!(result.config.index_length(), 0);
+
+        let attrs = result.config.attributes();
+        assert_eq!(attrs.len(), 2);
+
+        let pos = &attrs[0];
+        assert_eq!(pos.unique_id(), 0);
+        assert_eq!(pos.dim(), 3);
+        assert_eq!(pos.data_type(), AttributeDataType::Float32);
+        assert_eq!(pos.lenght(), 41214 * 12);
+        assert_eq!(pos.offset(), 0);
+
+        let rgb = &attrs[1];
+        assert_eq!(rgb.unique_id(), 1);
+        assert_eq!(rgb.dim(), 3);
+        assert_eq!(rgb.data_type(), AttributeDataType::UInt8);
+        assert_eq!(rgb.lenght(), 41214 * 3);
+        assert_eq!(rgb.offset(), pos.lenght());
+
+        assert_eq!(
+            result.config.buffer_size(),
+            (pos.lenght() + rgb.lenght()) as usize
+        );
+        assert_eq!(result.data.len(), result.config.buffer_size());
     }
 
     #[cfg(target_arch = "wasm32")]
